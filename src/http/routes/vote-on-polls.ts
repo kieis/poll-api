@@ -45,13 +45,13 @@ export async function voteOnPoll(app: FastifyInstance) {
     }
 
     if (!sessionId) {
-      sessionId = randomUUID();
-      reply.cookie("sessionId", sessionId, {
+      const generatedSessionId = randomUUID();
+      sessionId = reply.signCookie(generatedSessionId);
+      reply.setCookie("sessionId", sessionId, {
         path: "/",
         maxAge: 60 * 60 * 24 * 30,
-        signed: true,
         httpOnly: true,
-      });
+      })
     }
 
     await prisma.vote.create({
