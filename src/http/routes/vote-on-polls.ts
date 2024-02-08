@@ -16,11 +16,37 @@ export async function voteOnPoll(app: FastifyInstance) {
     const { pollOptionId } = voteOnPollBody.parse(request.body);
     const { pollId } = voteOnPollParams.parse(request.params);
 
-    const { sessionId } = request.cookies;
-    if (!sessionId) {
-      const generatedSessionId = randomUUID();
+    let { sessionId } = request.cookies;
 
-      reply.cookie("sessionId", generatedSessionId, {
+    if (sessionId) {
+      const userPreviousVoteOnPoll = await prisma.vote.findUnique({
+        where: {
+          sessionId_pollId: {
+            sessionId,
+            pollId,
+          },
+        },
+      });
+
+      if (
+        userPreviousVoteOnPoll &&
+        userPreviousVoteOnPoll.pollOptionId !== pollOptionId
+      ) {
+        await prisma.vote.delete({
+          where: {
+            id: userPreviousVoteOnPoll.id,
+          },
+        });
+      } else if (userPreviousVoteOnPoll) {
+        return reply.status(400).send({
+          message: "You already voted on this poll.",
+        });
+      }
+    }
+
+    if (!sessionId) {
+      sessionId = randomUUID();
+      reply.cookie("sessionId", sessionId, {
         path: "/",
         maxAge: 60 * 60 * 24 * 30,
         signed: true,
@@ -28,6 +54,16 @@ export async function voteOnPoll(app: FastifyInstance) {
       });
     }
 
-    return reply.status(201).send({});
+    await prisma.vote.create({
+      data: {
+        sessionId,
+        pollId,
+        pollOptionId,
+      },
+    });
+
+    return reply.status(201).send({
+      message: "Your vote has been computed successfully."
+    });
   });
 }
